@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text.Json;
+using System.Text;
+using System.Net.Mail;
 
 public enum Role
 {
@@ -11,10 +11,9 @@ public enum Role
     Warehouse,
     Cashier,
     Accountant,
-    Customer
+    Buyer
 }
 
-[Serializable]
 public class User
 {
     public string FullName { get; set; }
@@ -28,7 +27,7 @@ public class User
     public string Password { get; set; }
     public Role UserRole { get; set; }
 
-    public User(string fullName, DateTime dateOfBirth, string education, string workExperience, string position, string workplace, double salary, string login, string password, Role role)
+    public User(string fullName, DateTime dateOfBirth, string education, string workExperience, string position, string workplace, double salary, string login, string password, Role userRole)
     {
         FullName = fullName;
         DateOfBirth = dateOfBirth;
@@ -39,11 +38,10 @@ public class User
         Salary = salary;
         Login = login;
         Password = password;
-        UserRole = role;
+        UserRole = userRole;
     }
 }
 
-[Serializable]
 public class Product
 {
     public string Name { get; set; }
@@ -64,305 +62,405 @@ public class Product
     }
 }
 
-public class Program
+public class FinancialInfo
 {
+    public double EmployeeIncome { get; set; }
+    public double SalesIncome { get; set; }
+    public double CompanyBudget { get; set; }
+
+    public FinancialInfo(double employeeIncome, double salesIncome, double companyBudget)
+    {
+        EmployeeIncome = employeeIncome;
+        SalesIncome = salesIncome;
+        CompanyBudget = companyBudget;
+    }
+}
+
+class Program
+{
+    private static string userFilePath = "users.dat";
+    private static string productFilePath = "products.dat";
+    private static string financialFilePath = "financials.dat";
     private static List<User> users = new List<User>();
     private static List<Product> products = new List<Product>();
-    private static string userFilePath = @"users.json";
-    private static string productFilePath = @"products.json";
+    private static FinancialInfo financialInfo = new FinancialInfo(0, 0, 0);
+    private static List<Product> cart = new List<Product>();
 
-    public static void Main(string[] args)
+    static void Main()
     {
         LoadUsers();
         LoadProducts();
+        LoadFinancialInfo();
 
-        if (Login())
+        Console.WriteLine("Добро пожаловать в систему. Пожалуйста, войдите, чтобы продолжить.");
+        User currentUser = AuthenticateUser();
+
+        if (currentUser != null)
         {
-            Console.WriteLine("Авторизация прошла успешно!");
-
-            var loggedInUser = users.FirstOrDefault(u => u.Login == Console.ReadLine());
-
-            if (loggedInUser != null)
-            {
-                ShowMainMenu(loggedInUser);
-            }
-        }
-        else
-        {
-            Console.WriteLine("Ошибка авторизации");
+            Console.WriteLine($"Добро пожаловать, {currentUser.FullName}!");
+            ShowMainMenu(currentUser);
         }
     }
 
-    private static void LoadUsers()
+    private static User AuthenticateUser()
     {
-        if (File.Exists(userFilePath))
-        {
-            var json = File.ReadAllText(userFilePath);
-            users = JsonSerializer.Deserialize<List<User>>(json);
-        }
-        else
-        {
-            User admin = new User("Admin", new DateTime(1980, 1, 1), "Высшее", "20 лет", "Администратор", "", 0, "admin", "Password1!", Role.Admin);
-            users.Add(admin);
-            SaveUsers();
-        }
-    }
-
-    private static void LoadProducts()
-    {
-        if (File.Exists(productFilePath))
-        {
-            var json = File.ReadAllText(productFilePath);
-            products = JsonSerializer.Deserialize<List<Product>>(json);
-        }
-    }
-
-    private static void SaveUsers()
-    {
-        var json = JsonSerializer.Serialize(users, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(userFilePath, json);
-    }
-
-    private static void SaveProducts()
-    {
-        var json = JsonSerializer.Serialize(products, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(productFilePath, json);
-    }
-
-    private static bool Login()
-    {
-        Console.Write("Введите логин: ");
+        Console.Write("Введите ваш логин: ");
         string login = Console.ReadLine();
-
-        Console.Write("Введите пароль: ");
+        Console.Write("Введите ваш пароль: ");
         string password = ReadPassword();
 
-        var user = users.FirstOrDefault(u => u.Login == login && u.Password == password);
+        User user = users.FirstOrDefault(u => u.Login == login && u.Password == password);
 
-        return user != null;
+        if (user != null)
+        {
+            return user;
+        }
+        else
+        {
+            Console.WriteLine("Неверный логин или пароль.");
+            return null;
+        }
     }
 
     private static string ReadPassword()
     {
-        string password = "";
+        StringBuilder password = new StringBuilder();
         ConsoleKeyInfo key;
-        while ((key = Console.ReadKey(true)).Key != ConsoleKey.Enter)
+
+        do
         {
+            key = Console.ReadKey(true);
+
             if (key.Key == ConsoleKey.Backspace && password.Length > 0)
             {
-                password = password.Substring(0, password.Length - 1);
+                password.Remove(password.Length - 1, 1);
                 Console.Write("\b \b");
             }
-            else if (!char.IsControl(key.KeyChar))
+            else if (key.Key != ConsoleKey.Enter)
             {
-                password += key.KeyChar;
+                password.Append(key.KeyChar);
                 Console.Write("*");
             }
-        }
-        Console.WriteLine();
-        return password;
+
+        } while (key.Key != ConsoleKey.Enter);
+
+        return password.ToString();
     }
 
     private static void ShowMainMenu(User user)
     {
+        bool exit = false;
+        while (!exit)
+        {
+            Console.Clear();
+            Console.WriteLine($"Добро пожаловать, {user.FullName} ({user.UserRole})");
+            Console.WriteLine("1. Просмотр информации");
+            Console.WriteLine("2. Выйти");
+
+            // Пункт меню в зависимости от роли пользователя
+            switch (user.UserRole)
+            {
+                case Role.Admin:
+                    Console.WriteLine("3. Управление пользователями");
+                    break;
+                case Role.HR:
+                    Console.WriteLine("3. Управление сотрудниками");
+                    break;
+                case Role.Warehouse:
+                    Console.WriteLine("3. Управление товарами");
+                    break;
+                case Role.Cashier:
+                    Console.WriteLine("3. Оформление продажи");
+                    break;
+                case Role.Accountant:
+                    Console.WriteLine("3. Управление финансами");
+                    break;
+                case Role.Buyer:
+                    Console.WriteLine("3. Покупка товаров");
+                    break;
+                default:
+                    break;
+            }
+
+            Console.WriteLine("4. Выход");
+
+            int choice = GetValidMenuChoice();
+            switch (choice)
+            {
+                case 1:
+                    ViewInformation(user);
+                    break;
+                case 2:
+                    exit = true;
+                    break;
+                case 3:
+                    PerformRoleSpecificAction(user);
+                    break;
+                case 4:
+                    exit = true;
+                    break;
+                default:
+                    Console.WriteLine("Неверный выбор.");
+                    break;
+            }
+        }
+    }
+
+    private static int GetValidMenuChoice()
+    {
+        int choice;
+        while (!int.TryParse(Console.ReadLine(), out choice) || choice < 1 || choice > 4)
+        {
+            Console.WriteLine("Некорректный ввод. Пожалуйста, попробуйте снова.");
+        }
+        return choice;
+    }
+
+    private static void PerformRoleSpecificAction(User user)
+    {
         switch (user.UserRole)
         {
             case Role.Admin:
-                AdminMenu();
+                ManageUsers();
                 break;
             case Role.HR:
-                HRMenu();
+                ManageEmployees();
                 break;
             case Role.Warehouse:
-                WarehouseMenu();
-                break;
-            case Role.Cashier:
-                CashierMenu();
+                ManageProducts();
                 break;
             case Role.Accountant:
-                AccountantMenu();
+                ManageFinances();
                 break;
-            case Role.Customer:
-                CustomerMenu();
+            case Role.Buyer:
+                BuyProducts();
                 break;
             default:
-                Console.WriteLine("Роль не определена.");
+                Console.WriteLine("Неверная роль.");
                 break;
         }
     }
 
-    private static void AdminMenu()
+    private static void ViewInformation(User user)
     {
-        Console.WriteLine("Меню администратора:");
+        if (user.UserRole == Role.Admin)
+        {
+            // Если это админ, выводим список всех пользователей
+            Console.WriteLine("Список пользователей:");
+            for (int i = 0; i < users.Count; i++)
+            {
+                Console.WriteLine($"{i + 1}. {users[i].FullName} ({users[i].UserRole})");
+            }
+
+            Console.Write("Введите номер пользователя для просмотра информации: ");
+            int userIndex = int.Parse(Console.ReadLine()) - 1;
+
+            if (userIndex >= 0 && userIndex < users.Count)
+            {
+                // Показываем информацию о выбранном пользователе
+                User selectedUser = users[userIndex];
+                Console.WriteLine($"ФИО: {selectedUser.FullName}");
+                Console.WriteLine($"Роль: {selectedUser.UserRole}");
+                Console.WriteLine($"Зарплата: {selectedUser.Salary}");
+                Console.WriteLine($"Дата рождения: {selectedUser.DateOfBirth.ToShortDateString()}");
+                Console.WriteLine($"Должность: {selectedUser.Position}");
+                Console.WriteLine($"Место работы: {selectedUser.Workplace}");
+            }
+            else
+            {
+                Console.WriteLine("Неверный номер пользователя.");
+            }
+        }
+        else
+        {
+            // Если это не админ, показываем только информацию о текущем пользователе
+            Console.WriteLine($"ФИО: {user.FullName}");
+            Console.WriteLine($"Роль: {user.UserRole}");
+            Console.WriteLine($"Зарплата: {user.Salary}");
+            Console.WriteLine($"Дата рождения: {user.DateOfBirth.ToShortDateString()}");
+            Console.WriteLine($"Должность: {user.Position}");
+            Console.WriteLine($"Место работы: {user.Workplace}");
+        }
+
+        Console.WriteLine("Нажмите любую клавишу, чтобы вернуться.");
+        Console.ReadKey();
+    }
+
+    private static void ManageUsers()
+    {
+        Console.Clear();
+        Console.WriteLine("Управление пользователями:");
         Console.WriteLine("1. Добавить пользователя");
-        Console.WriteLine("2. Просмотр всех пользователей");
-        Console.WriteLine("0. Выйти");
+        Console.WriteLine("2. Редактировать пользователя");
+        Console.WriteLine("3. Удалить пользователя");
+        Console.WriteLine("4. Вернуться");
 
-        var choice = Console.ReadKey(true).KeyChar;
-
-        if (choice == '1')
+        int choice = GetValidMenuChoice();
+        switch (choice)
         {
-            AddUser();
-        }
-        else if (choice == '2')
-        {
-            ViewAllUsers();
-        }
-        else if (choice == '0')
-        {
-            Console.WriteLine("Выход из системы...");
-        }
-    }
-
-
-    private static void HRMenu()
-    {
-        Console.WriteLine("Меню кадровика:");
-        Console.WriteLine("1. Просмотр всех сотрудников");
-        Console.WriteLine("2. Увольнение сотрудника");
-        Console.WriteLine("0. Выйти");
-
-        var choice = Console.ReadKey(true).KeyChar;
-
-        if (choice == '1')
-        {
-            ViewAllUsers();
-        }
-        else if (choice == '2')
-        {
-            FireEmployee();
-        }
-        else if (choice == '0')
-        {
-            Console.WriteLine("Выход из системы...");
-        }
-    }
-
-    private static void WarehouseMenu()
-    {
-        Console.WriteLine("Меню складского работника:");
-        Console.WriteLine("1. Добавить товар");
-        Console.WriteLine("2. Просмотр товаров");
-        Console.WriteLine("0. Выйти");
-
-        var choice = Console.ReadKey(true).KeyChar;
-
-        if (choice == '1')
-        {
-            AddProduct();
-        }
-        else if (choice == '2')
-        {
-            ViewAllProducts();
-        }
-        else if (choice == '0')
-        {
-            Console.WriteLine("Выход из системы...");
-        }
-    }
-
-    private static void CashierMenu()
-    {
-        Console.WriteLine("Меню кассира:");
-        Console.WriteLine("1. Оформить заказ");
-        Console.WriteLine("0. Выйти");
-
-        var choice = Console.ReadKey(true).KeyChar;
-
-        if (choice == '1')
-        {
-            ProcessOrder();
-        }
-        else if (choice == '0')
-        {
-            Console.WriteLine("Выход из системы...");
-        }
-    }
-
-    private static void AccountantMenu()
-    {
-        Console.WriteLine("Меню бухгалтера:");
-        Console.WriteLine("1. Рассчитать зарплату");
-        Console.WriteLine("0. Выйти");
-
-        var choice = Console.ReadKey(true).KeyChar;
-
-        if (choice == '1')
-        {
-            CalculateSalary();
-        }
-        else if (choice == '0')
-        {
-            Console.WriteLine("Выход из системы...");
-        }
-    }
-
-    private static void CustomerMenu()
-    {
-        Console.WriteLine("Меню покупателя:");
-        Console.WriteLine("1. Просмотреть товары");
-        Console.WriteLine("2. Сделать заказ");
-        Console.WriteLine("0. Выйти");
-
-        var choice = Console.ReadKey(true).KeyChar;
-
-        if (choice == '1')
-        {
-            ViewAllProducts();
-        }
-        else if (choice == '2')
-        {
-            MakeOrder();
-        }
-        else if (choice == '0')
-        {
-            Console.WriteLine("Выход из системы...");
+            case 1:
+                AddUser();
+                break;
+            case 2:
+                EditUser();
+                break;
+            case 3:
+                DeleteUser();
+                break;
+            case 4:
+                return;
+            default:
+                Console.WriteLine("Неверный выбор.");
+                break;
         }
     }
 
     private static void AddUser()
     {
-        Console.WriteLine("Добавление нового пользователя");
-
-        Console.Write("ФИО: ");
+        Console.Write("Введите ФИО пользователя: ");
         string fullName = Console.ReadLine();
-
-        Console.Write("Дата рождения (yyyy-mm-dd): ");
+        Console.Write("Введите дату рождения (dd.mm.yyyy): ");
         DateTime dateOfBirth = DateTime.Parse(Console.ReadLine());
-
-        Console.Write("Образование: ");
+        Console.Write("Введите образование: ");
         string education = Console.ReadLine();
-
-        Console.Write("Опыт работы: ");
+        Console.Write("Введите опыт работы: ");
         string workExperience = Console.ReadLine();
-
-        Console.Write("Должность: ");
+        Console.Write("Введите должность: ");
         string position = Console.ReadLine();
-
-        Console.Write("Место работы: ");
+        Console.Write("Введите место работы: ");
         string workplace = Console.ReadLine();
-
-        Console.Write("Зарплата: ");
+        Console.Write("Введите зарплату: ");
         double salary = double.Parse(Console.ReadLine());
-
-        Console.Write("Логин: ");
+        Console.Write("Введите логин: ");
         string login = Console.ReadLine();
-
-        Console.Write("Пароль: ");
+        Console.Write("Введите пароль: ");
         string password = ReadPassword();
+        Console.WriteLine("Выберите роль: 0 - Admin, 1 - HR, 2 - Warehouse, 3 - Cashier, 4 - Accountant, 5 - Buyer");
+        Role role = (Role)Enum.Parse(typeof(Role), Console.ReadLine());
 
-        User newUser = new User(fullName, dateOfBirth, education, workExperience, position, workplace, salary, login, password, Role.HR);
-
+        User newUser = new User(fullName, dateOfBirth, education, workExperience, position, workplace, salary, login, password, role);
         users.Add(newUser);
-        SaveUsers();
+        Console.WriteLine("Пользователь добавлен!");
     }
 
-    private static void ViewAllUsers()
+    private static void EditUser()
     {
-        Console.WriteLine("Список пользователей:");
-        foreach (var user in users)
+        Console.Write("Введите логин пользователя для редактирования: ");
+        string login = Console.ReadLine();
+        User userToEdit = users.FirstOrDefault(u => u.Login == login);
+
+        if (userToEdit != null)
         {
-            Console.WriteLine($"ФИО: {user.FullName}, Логин: {user.Login}, Должность: {user.Position}");
+            Console.WriteLine($"Редактирование пользователя: {userToEdit.FullName}");
+            Console.Write("Введите новое ФИО (оставьте пустым, чтобы оставить без изменений): ");
+            string fullName = Console.ReadLine();
+            if (!string.IsNullOrEmpty(fullName)) userToEdit.FullName = fullName;
+
+            Console.Write("Введите новое образование (оставьте пустым, чтобы оставить без изменений): ");
+            string education = Console.ReadLine();
+            if (!string.IsNullOrEmpty(education)) userToEdit.Education = education;
+
+            Console.Write("Введите новый опыт работы (оставьте пустым, чтобы оставить без изменений): ");
+            string workExperience = Console.ReadLine();
+            if (!string.IsNullOrEmpty(workExperience)) userToEdit.WorkExperience = workExperience;
+
+            Console.Write("Введите новую должность (оставьте пустым, чтобы оставить без изменений): ");
+            string position = Console.ReadLine();
+            if (!string.IsNullOrEmpty(position)) userToEdit.Position = position;
+
+            Console.Write("Введите новое место работы (оставьте пустым, чтобы оставить без изменений): ");
+            string workplace = Console.ReadLine();
+            if (!string.IsNullOrEmpty(workplace)) userToEdit.Workplace = workplace;
+
+            Console.Write("Введите новую зарплату (оставьте пустым, чтобы оставить без изменений): ");
+            string salaryInput = Console.ReadLine();
+            if (!string.IsNullOrEmpty(salaryInput)) userToEdit.Salary = double.Parse(salaryInput);
+
+            Console.WriteLine("Данные пользователя обновлены!");
+        }
+        else
+        {
+            Console.WriteLine("Пользователь не найден.");
+        }
+    }
+
+    private static void DeleteUser()
+    {
+        Console.Write("Введите логин пользователя для удаления: ");
+        string login = Console.ReadLine();
+        User userToDelete = users.FirstOrDefault(u => u.Login == login);
+
+        if (userToDelete != null)
+        {
+            users.Remove(userToDelete);
+            Console.WriteLine("Пользователь удален.");
+        }
+        else
+        {
+            Console.WriteLine("Пользователь не найден.");
+        }
+    }
+
+    private static void ManageEmployees()
+    {
+        Console.Clear();
+        Console.WriteLine("Управление сотрудниками:");
+        Console.WriteLine("1. Просмотр всех сотрудников");
+        Console.WriteLine("2. Редактировать данные сотрудников");
+        Console.WriteLine("3. Уволить сотрудника");
+        Console.WriteLine("4. Вернуться");
+
+        int choice = GetValidMenuChoice();
+        switch (choice)
+        {
+            case 1:
+                ViewAllEmployees();
+                break;
+            case 2:
+                EditEmployee();
+                break;
+            case 3:
+                FireEmployee();
+                break;
+            case 4:
+                return;
+            default:
+                Console.WriteLine("Неверный выбор.");
+                break;
+        }
+    }
+
+    private static void ViewAllEmployees()
+    {
+        Console.WriteLine("Список сотрудников:");
+        foreach (var user in users.Where(u => u.UserRole != Role.Admin))
+        {
+            Console.WriteLine($"{user.FullName} - {user.Position}");
+        }
+    }
+
+    private static void EditEmployee()
+    {
+        Console.Write("Введите логин сотрудника для редактирования: ");
+        string login = Console.ReadLine();
+        User employeeToEdit = users.FirstOrDefault(u => u.Login == login && u.UserRole != Role.Admin);
+
+        if (employeeToEdit != null)
+        {
+            Console.WriteLine($"Редактирование данных сотрудника: {employeeToEdit.FullName}");
+            Console.Write("Введите новое место работы (оставьте пустым, чтобы оставить без изменений): ");
+            string workplace = Console.ReadLine();
+            if (!string.IsNullOrEmpty(workplace)) employeeToEdit.Workplace = workplace;
+
+            Console.Write("Введите новую зарплату (оставьте пустым, чтобы оставить без изменений): ");
+            string salaryInput = Console.ReadLine();
+            if (!string.IsNullOrEmpty(salaryInput)) employeeToEdit.Salary = double.Parse(salaryInput);
+
+            Console.WriteLine("Данные сотрудника обновлены!");
+        }
+        else
+        {
+            Console.WriteLine("Сотрудник не найден.");
         }
     }
 
@@ -370,68 +468,211 @@ public class Program
     {
         Console.Write("Введите логин сотрудника для увольнения: ");
         string login = Console.ReadLine();
+        User employeeToFire = users.FirstOrDefault(u => u.Login == login && u.UserRole != Role.Admin);
 
-        var user = users.FirstOrDefault(u => u.Login == login);
-        if (user != null && user.UserRole != Role.Admin)
+        if (employeeToFire != null)
         {
-            users.Remove(user);
-            SaveUsers();
+            users.Remove(employeeToFire);
             Console.WriteLine("Сотрудник уволен.");
         }
         else
         {
-            Console.WriteLine("Сотрудник не найден или это администратор.");
+            Console.WriteLine("Сотрудник не найден.");
         }
     }
 
-    private static void ViewAllProducts()
+    private static void ManageProducts()
     {
-        Console.WriteLine("Список товаров:");
-        foreach (var product in products)
+        Console.Clear();
+        Console.WriteLine("Управление товарами:");
+        Console.WriteLine("1. Добавить товар");
+        Console.WriteLine("2. Просмотр товаров");
+        Console.WriteLine("3. Редактировать товар");
+        Console.WriteLine("4. Удалить товар");
+        Console.WriteLine("5. Вернуться");
+
+        int choice = GetValidMenuChoice();
+        switch (choice)
         {
-            Console.WriteLine($"Товар: {product.Name}, Количество: {product.Quantity}, Цена: {product.Price}");
+            case 1:
+                AddProduct();
+                break;
+            case 2:
+                ViewProducts();
+                break;
+            case 3:
+                EditProduct();
+                break;
+            case 4:
+                DeleteProduct();
+                break;
+            case 5:
+                return;
+            default:
+                Console.WriteLine("Неверный выбор.");
+                break;
         }
     }
 
     private static void AddProduct()
     {
-        Console.WriteLine("Добавление товара");
-
-        Console.Write("Наименование товара: ");
+        Console.Write("Введите название товара: ");
         string name = Console.ReadLine();
-
-        Console.Write("Количество товара: ");
+        Console.Write("Введите количество: ");
         int quantity = int.Parse(Console.ReadLine());
-
-        Console.Write("Срок годности (yyyy-mm-dd): ");
+        Console.Write("Введите срок годности (dd.mm.yyyy): ");
         DateTime expiryDate = DateTime.Parse(Console.ReadLine());
-
-        Console.Write("Категория товара: ");
+        Console.Write("Введите категорию: ");
         string category = Console.ReadLine();
-
-        Console.Write("Цена товара: ");
+        Console.Write("Введите цену: ");
         double price = double.Parse(Console.ReadLine());
-
-        Console.Write("Наименование магазина: ");
+        Console.Write("Введите название магазина: ");
         string storeName = Console.ReadLine();
 
         Product newProduct = new Product(name, quantity, expiryDate, category, price, storeName);
         products.Add(newProduct);
-        SaveProducts();
+        Console.WriteLine("Товар добавлен!");
     }
 
-    private static void ProcessOrder()
+    private static void ViewProducts()
     {
-        Console.WriteLine("Оформление заказа...");
+        Console.WriteLine("Список товаров:");
+        foreach (var product in products)
+        {
+            Console.WriteLine($"{product.Name} - {product.Quantity} шт. - {product.Price} руб.");
+        }
     }
 
-    private static void CalculateSalary()
+    private static void EditProduct()
     {
-        Console.WriteLine("Расчёт зарплаты...");
+        Console.Write("Введите название товара для редактирования: ");
+        string name = Console.ReadLine();
+        Product productToEdit = products.FirstOrDefault(p => p.Name == name);
+
+        if (productToEdit != null)
+        {
+            Console.WriteLine($"Редактирование товара: {productToEdit.Name}");
+            Console.Write("Введите новое количество (оставьте пустым, чтобы оставить без изменений): ");
+            string quantityInput = Console.ReadLine();
+            if (!string.IsNullOrEmpty(quantityInput)) productToEdit.Quantity = int.Parse(quantityInput);
+
+            Console.Write("Введите новую цену (оставьте пустым, чтобы оставить без изменений): ");
+            string priceInput = Console.ReadLine();
+            if (!string.IsNullOrEmpty(priceInput)) productToEdit.Price = double.Parse(priceInput);
+
+            Console.WriteLine("Товар обновлен!");
+        }
+        else
+        {
+            Console.WriteLine("Товар не найден.");
+        }
     }
 
-    private static void MakeOrder()
+    private static void DeleteProduct()
     {
-        Console.WriteLine("Создание заказа...");
+        Console.Write("Введите название товара для удаления: ");
+        string name = Console.ReadLine();
+        Product productToDelete = products.FirstOrDefault(p => p.Name == name);
+
+        if (productToDelete != null)
+        {
+            products.Remove(productToDelete);
+            Console.WriteLine("Товар удален.");
+        }
+        else
+        {
+            Console.WriteLine("Товар не найден.");
+        }
+    }
+
+    private static void BuyProducts()
+    {
+        Console.Clear();
+        Console.WriteLine("Покупка товаров:");
+        ViewProducts();
+        Console.Write("Введите название товара для добавления в корзину: ");
+        string productName = Console.ReadLine();
+        Product productToBuy = products.FirstOrDefault(p => p.Name == productName);
+
+        if (productToBuy != null && productToBuy.Quantity > 0)
+        {
+            cart.Add(productToBuy);
+            productToBuy.Quantity--;
+            Console.WriteLine("Товар добавлен в корзину.");
+        }
+        else
+        {
+            Console.WriteLine("Товар не найден или нет в наличии.");
+        }
+
+        Console.Write("Хотите продолжить покупки? (y/n): ");
+        string continueShopping = Console.ReadLine();
+        if (continueShopping.ToLower() == "y")
+        {
+            BuyProducts();
+        }
+        else
+        {
+            Console.WriteLine("Корзина:");
+            double totalPrice = 0;
+            foreach (var item in cart)
+            {
+                Console.WriteLine($"{item.Name} - {item.Price} руб.");
+                totalPrice += item.Price;
+            }
+
+            Console.WriteLine($"Итого: {totalPrice} руб.");
+        }
+    }
+
+    private static void ManageFinances()
+    {
+        Console.Clear();
+        Console.WriteLine("Управление финансами:");
+        Console.WriteLine("1. Просмотр финансов");
+        Console.WriteLine("2. Вернуться");
+
+        int choice = GetValidMenuChoice();
+        switch (choice)
+        {
+            case 1:
+                ViewFinances();
+                break;
+            case 2:
+                return;
+            default:
+                Console.WriteLine("Неверный выбор.");
+                break;
+        }
+    }
+
+    private static void ViewFinances()
+    {
+        Console.WriteLine("Финансовая информация:");
+        Console.WriteLine($"Доходы сотрудников: {financialInfo.EmployeeIncome}");
+        Console.WriteLine($"Доходы от продаж: {financialInfo.SalesIncome}");
+        Console.WriteLine($"Бюджет компании: {financialInfo.CompanyBudget}");
+    }
+    private static void LoadUsers()
+    {
+        users.Add(new User("Администратор", new DateTime(1980, 5, 15), "Высшее", "10 лет", "Администратор", "Компания", 100000, "admin", "Admin123!", Role.Admin));
+        users.Add(new User("Кадры", new DateTime(1990, 6, 20), "Высшее", "5 лет", "Менеджер по кадрам", "Компания", 50000, "hr", "Hr2024*", Role.HR));
+        users.Add(new User("Склад", new DateTime(1985, 8, 30), "Среднее", "8 лет", "Кладовщик", "Компания", 40000, "warehouse", "Warehouse1$", Role.Warehouse));
+        users.Add(new User("Кассир", new DateTime(1995, 11, 10), "Среднее", "3 года", "Кассир", "Магазин", 25000, "cashier", "Cashier$2024", Role.Cashier));
+        users.Add(new User("Бухгалтер", new DateTime(1983, 2, 5), "Высшее", "10 лет", "Бухгалтер", "Компания", 60000, "accountant", "Acc$2024", Role.Accountant));
+        users.Add(new User("Покупатель", new DateTime(2000, 3, 10), "Среднее", "0 лет", "Покупатель", "Магазин", 0, "buyer", "Buyer123", Role.Buyer));
+    }
+
+
+
+    private static void LoadProducts()
+    {
+        products.Add(new Product("Яблоки", 50, new DateTime(2025, 12, 31), "Фрукты", 100, "Пятерочка"));
+        products.Add(new Product("Хлеб", 30, new DateTime(2025, 1, 15), "Продукты", 50, "Авоська"));
+    }
+
+    private static void LoadFinancialInfo()
+    {
+        financialInfo = new FinancialInfo(100000, 500000, 2000000);  // Примерные суммы
     }
 }
